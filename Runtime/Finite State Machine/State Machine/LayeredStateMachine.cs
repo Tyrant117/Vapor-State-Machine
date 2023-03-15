@@ -1,63 +1,32 @@
-using JetBrains.Annotations;
-using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace VaporStateMachine
 {
     public class LayeredStateMachine : State, IStateMachine
     {
-        /// <summary>
-		/// A bundle of a state together with the outgoing transitions and trigger transitions.
-		/// It's useful, as you only need to do one Dictionary lookup for these three items.
-		/// => Much better performance
-		/// </summary>
-		private class StateBundle
-        {
-            // By default, these fields are all null and only get a value when you need them
-            // => Lazy evaluation => Memory efficient, when you only need a subset of features
-            public State state;
-            public List<Transition> transitions;
-            public Dictionary<int, List<Transition>> triggerToTransitions;
+        static readonly ProfilerMarker s_EnterMarker = new(ProfilerCategory.Scripts, "Vapor.LayeredStateMachine.Enter");
+        static readonly ProfilerMarker s_UpdateMarker = new(ProfilerCategory.Scripts, "Vapor.LayeredStateMachine.Update");
+        static readonly ProfilerMarker s_ExitMarker = new(ProfilerCategory.Scripts, "Vapor.LayeredStateMachine.Exit");
+        static readonly ProfilerMarker s_ChangeStateMarker = new(ProfilerCategory.Scripts, "Vapor.LayeredStateMachine.ChangeState");
 
-            public void AddTransition(Transition t)
-            {
-                transitions ??= new List<Transition>();
-                transitions.Add(t);
-            }
-
-            public void AddTriggerTransition(int trigger, Transition transition)
-            {
-                triggerToTransitions ??= new Dictionary<int, List<Transition>>();
-
-                if (!triggerToTransitions.TryGetValue(trigger, out List<Transition> transitionsOfTrigger))
-                {
-                    transitionsOfTrigger = new List<Transition>();
-                    triggerToTransitions.Add(trigger, transitionsOfTrigger);
-                }
-                transitionsOfTrigger.Add(transition);
-            }
-        }
-
-
-        private Dictionary<int, State> activeStates = new();
+        private readonly Dictionary<int, State> _activeStates = new();
         public Dictionary<int, State> ActiveStates
         {
             get
             {
                 EnsureIsInitializedFor();
-                return activeStates;
+                return _activeStates;
             }
         }
         private readonly List<int> _activeStateIDs = new();
         public List<int> GetActiveStateIDs()
         {
             _activeStateIDs.Clear();
-            for (int i = 0; i < activeStates.Count; i++)
+            for (int i = 0; i < _activeStates.Count; i++)
             {
-                _activeStateIDs.Add(activeStates[i].ID);
+                _activeStateIDs.Add(_activeStates[i].ID);
             }
             return _activeStateIDs;
         }
@@ -65,33 +34,36 @@ namespace VaporStateMachine
         public List<string> GetActiveStateNames()
         {
             _activeStateNames.Clear();
-            for (int i = 0; i < activeStates.Count; i++)
+            for (int i = 0; i < _activeStates.Count; i++)
             {
-                _activeStateNames.Add(activeStates[i].Name);
+                _activeStateNames.Add(_activeStates[i].Name);
             }
             return _activeStateNames;
         }
         
         public bool IsRoot => StateMachine == null;
 
-        private Dictionary<int, (int layer, int state, bool hasState)> startStates = new();
-        private Dictionary<int, (int layer, int state, bool isPending)> pendingStates = new();
+        private readonly Dictionary<int, (int layer, int state, bool hasState)> _startStates = new();
+        private readonly Dictionary<int, (int layer, int state, bool isPending)> _pendingStates = new();
 
         // A cached empty list of transitions (For improved readability, less GC)
         private static readonly List<Transition> noTransitions = new(0);
         private static readonly Dictionary<int, List<Transition>> noTriggerTransitions = new(0);
 
         // Central storage of states
-        private readonly Dictionary<Vector2Int, StateBundle> nameToStateBundle = new();
-        private readonly Dictionary<Vector2Int, string> stateToStringMap = new();
+        private readonly Dictionary<Vector2Int, StateBundle> _nameToStateBundle = new();
+        private readonly Dictionary<Vector2Int, string> _stateToStringMap = new();
 
-        private Dictionary<int, List<Transition>> activeTransitions = new();
-        private Dictionary<int, Dictionary<int, List<Transition>>> activeTriggerTransitions = new();
+        private readonly Dictionary<int, List<Transition>> _activeTransitions = new();
+        private readonly Dictionary<int, Dictionary<int, List<Transition>>> _activeTriggerTransitions = new();
 
-        private readonly Dictionary<int, List<Transition>> transitionsFromAny = new();
-        private readonly Dictionary<int, Dictionary<int, List<Transition>>> triggerTransitionsFromAny = new();
+        private readonly Dictionary<int, List<Transition>> _transitionsFromAny = new();
+        private readonly Dictionary<int, Dictionary<int, List<Transition>>> _triggerTransitionsFromAny = new();
 
         private int _layerCount;
+
+        protected StateLogger _logger;
+        protected StateLogger.LayerLog _layerLog;
 
         #region - Initialization -
         public LayeredStateMachine(string name, bool canExitInstantly = false) : base(name, canExitInstantly)
@@ -106,12 +78,12 @@ namespace VaporStateMachine
         /// 	be initialised for.</param>
         private void EnsureIsInitializedFor()
         {
-            if (activeStates == null)
+            if (_activeStates == null)
             {
                 Debug.LogError(StateMachineExceptions.StateMachineNotInitialized);
                 return;
             }
-            if (activeStates.Count == 0)
+            if (_activeStates.Count == 0)
             {
                 Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
             }
@@ -123,7 +95,7 @@ namespace VaporStateMachine
         /// <param name="name">The name / identifier of the start state</param>
         public void SetDefaultState(int name, int layer)
         {
-            startStates[layer] = (layer, name, true);
+            _startStates[layer] = (layer, name, true);
         }
 
         /// <summary>
@@ -132,7 +104,7 @@ namespace VaporStateMachine
         /// <param name="name">The name / identifier of the start state</param>
         public void SetDefaultState(State name, int layer)
         {
-            startStates[layer] = (layer, name.ID, true);
+            _startStates[layer] = (layer, name.ID, true);
         }
 
         /// <summary>
@@ -153,24 +125,25 @@ namespace VaporStateMachine
 		/// </summary>
 		public override void OnEnter()
         {
-            foreach (var startingState in startStates.Values)
+            s_EnterMarker.Begin();
+            foreach (var startingState in _startStates.Values)
             {
                 if (!startingState.hasState)
                 {
                     Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
                 }
             }
-            if(startStates.Count == 0)
+            if(_startStates.Count == 0)
             {
                 Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
             }
 
-            foreach (var startingState in startStates.Values)
+            foreach (var startingState in _startStates.Values)
             {
                 ChangeState(startingState.layer, startingState.state);
             }
 
-            foreach (var layer in transitionsFromAny.Values)
+            foreach (var layer in _transitionsFromAny.Values)
             {
                 foreach (var t in layer)
                 {
@@ -178,7 +151,7 @@ namespace VaporStateMachine
                 }
             }
 
-            foreach (var layer in triggerTransitionsFromAny.Values)
+            foreach (var layer in _triggerTransitionsFromAny.Values)
             {
                 foreach (var transitions in layer.Values)
                 {
@@ -188,6 +161,7 @@ namespace VaporStateMachine
                     }
                 }
             }
+            s_EnterMarker.End();
         }
 
         /// <summary>
@@ -197,6 +171,7 @@ namespace VaporStateMachine
 		/// </summary>
 		public override void OnUpdate()
         {
+            s_UpdateMarker.Begin();
             EnsureIsInitializedFor();
 
             for (int i = 0; i < _layerCount; i++)
@@ -206,22 +181,25 @@ namespace VaporStateMachine
                     TryAllDirectTransitions(i);
                 }
 
-                activeStates[i].OnUpdate();
+                _activeStates[i].OnUpdate();
             }
+            s_UpdateMarker.End();
         }
 
         public override void OnExit()
         {
-            if (activeStates != null && activeStates.Count > 0)
+            s_ExitMarker.Begin();
+            if (_activeStates != null && _activeStates.Count > 0)
             {
-                foreach (var state in activeStates)
+                foreach (var state in _activeStates)
                 {
                     state.Value.OnExit();
-                    activeStates[state.Key] = null;
+                    _activeStates[state.Key] = null;
                 }
                 // By setting the activeState to null, the state's onExit method won't be called
                 // a second time when the state machine enters again (and changes to the start state)
             }
+            s_ExitMarker.End();
         }
 
         /// <summary>
@@ -232,7 +210,7 @@ namespace VaporStateMachine
         {
             for (int i = 0; i < _layerCount; i++)
             {
-                var pendingState = pendingStates[i];
+                var pendingState = _pendingStates[i];
                 if (pendingState.isPending)
                 {
                     int layer = pendingState.layer;
@@ -241,7 +219,7 @@ namespace VaporStateMachine
                     // to try all outgoing transitions, which may overwrite the pendingState.
                     // That's why it is first cleared, and not afterwards, as that would overwrite
                     // a new, valid pending state.
-                    pendingStates[layer] = (layer, EMPTY_STATE, false);
+                    _pendingStates[layer] = (layer, EMPTY_STATE, false);
                     ChangeState(layer, state);
                 }
             }
@@ -260,11 +238,16 @@ namespace VaporStateMachine
 		/// <param name="name">The name / identifier of the active state</param>
 		private void ChangeState(int layer, int name)
         {
-            activeStates[layer]?.OnExit();
-
-            if (!nameToStateBundle.TryGetValue(new (layer, name), out StateBundle bundle) || bundle.state == null)
+            s_ChangeStateMarker.Begin();
+            if (_activeStates[layer] != null)
             {
-                if (stateToStringMap.TryGetValue(new(layer, name), out string nameString))
+                _layerLog?.LogExit(_activeStates[layer].Name);
+                _activeStates[layer].OnExit();
+            }
+
+            if (!_nameToStateBundle.TryGetValue(new(layer, name), out StateBundle bundle) || bundle.State == null)
+            {
+                if (_stateToStringMap.TryGetValue(new(layer, name), out string nameString))
                 {
                     Debug.LogError(StateMachineExceptions.StateNotFound(nameString));
                 }
@@ -274,18 +257,19 @@ namespace VaporStateMachine
                 }
             }
 
-            activeTransitions[layer] = bundle.transitions ?? noTransitions;
-            activeTriggerTransitions[layer] = bundle.triggerToTransitions ?? noTriggerTransitions;
+            _activeTransitions[layer] = bundle.Transitions ?? noTransitions;
+            _activeTriggerTransitions[layer] = bundle.TriggerToTransitions ?? noTriggerTransitions;
 
-            activeStates[layer] = bundle.state;
-            activeStates[layer].OnEnter();
+            _activeStates[layer] = bundle.State;
+            _layerLog?.LogEnter(_activeStates[layer].Name);
+            _activeStates[layer].OnEnter();
 
-            foreach (var t in activeTransitions[layer])
+            foreach (var t in _activeTransitions[layer])
             {
                 t.OnEnter();
             }
 
-            foreach (var transitions in activeTriggerTransitions[layer].Values)
+            foreach (var transitions in _activeTriggerTransitions[layer].Values)
             {
                 foreach (Transition t in transitions)
                 {
@@ -293,10 +277,11 @@ namespace VaporStateMachine
                 }
             }
 
-            if (activeStates[layer].CanExitInstantly)
+            if (_activeStates[layer].CanExitInstantly)
             {
                 TryAllDirectTransitions(layer);
             }
+            s_ChangeStateMarker.End();
         }
 
         /// <summary>
@@ -313,8 +298,8 @@ namespace VaporStateMachine
             }
             else
             {
-                pendingStates[layer] = (layer, name, true);
-                activeStates[layer].OnExitRequest();
+                _pendingStates[layer] = (layer, name, true);
+                _activeStates[layer].OnExitRequest();
                 /**
 				 * If it can exit, the activeState would call
 				 * -> state.fsm.StateCanExit() which in turn would call
@@ -337,8 +322,8 @@ namespace VaporStateMachine
             }
             else
             {
-                pendingStates[0] = (0, name, true);
-                activeStates[0].OnExitRequest();
+                _pendingStates[0] = (0, name, true);
+                _activeStates[0].OnExitRequest();
                 /**
 				 * If it can exit, the activeState would call
 				 * -> state.fsm.StateCanExit() which in turn would call
@@ -358,10 +343,10 @@ namespace VaporStateMachine
 		/// <returns></returns>
 		private StateBundle GetOrCreateStateBundle(int layer, int name)
         {
-            if (!nameToStateBundle.TryGetValue(new(layer, name), out StateBundle bundle))
+            if (!_nameToStateBundle.TryGetValue(new(layer, name), out StateBundle bundle))
             {
                 bundle = new StateBundle();
-                nameToStateBundle.Add(new(layer, name), bundle);
+                _nameToStateBundle.Add(new(layer, name), bundle);
             }
 
             return bundle;
@@ -378,33 +363,33 @@ namespace VaporStateMachine
             state.Init();
 
             StateBundle bundle = GetOrCreateStateBundle(layer, state.ID);
-            bundle.state = state;
-            stateToStringMap.Add(new(layer, state.ID), state.Name);
+            bundle.State = state;
+            _stateToStringMap.Add(new(layer, state.ID), state.Name);
 
-            if (!startStates.ContainsKey(layer) || !startStates[layer].hasState)
+            if (!_startStates.ContainsKey(layer) || !_startStates[layer].hasState)
             {
                 SetDefaultState(state.ID, layer);
-                pendingStates[layer] = (layer, state.ID, false);
-                activeStates.Add(layer, null);
-                transitionsFromAny.Add(layer, new());
+                _pendingStates[layer] = (layer, state.ID, false);
+                _activeStates.Add(layer, null);
+                _transitionsFromAny.Add(layer, new());
                 _layerCount++;
             }
         }
 
         public State GetState(int layer, string name)
         {
-            if (!nameToStateBundle.TryGetValue(new (layer, name.GetHashCode()), out StateBundle bundle) || bundle.state == null)
+            if (!_nameToStateBundle.TryGetValue(new (layer, name.GetHashCode()), out StateBundle bundle) || bundle.State == null)
             {
                 Debug.LogError(StateMachineExceptions.StateNotFound(name));
             }
-            return bundle.state;
+            return bundle.State;
         }
 
         public State GetState(int layer, int name)
         {
-            if (!nameToStateBundle.TryGetValue(new(layer, name.GetHashCode()), out StateBundle bundle) || bundle.state == null)
+            if (!_nameToStateBundle.TryGetValue(new(layer, name.GetHashCode()), out StateBundle bundle) || bundle.State == null)
             {
-                if (stateToStringMap.TryGetValue(new(layer, name), out string nameString))
+                if (_stateToStringMap.TryGetValue(new(layer, name), out string nameString))
                 {
                     Debug.LogError(StateMachineExceptions.StateNotFound(nameString));
                 }
@@ -413,7 +398,7 @@ namespace VaporStateMachine
                     Debug.LogError(StateMachineExceptions.StateNotFound(name.ToString()));
                 }
             }
-            return bundle.state;
+            return bundle.State;
         }
 
         public T GetSubStateMachine<T>(int layer, string name) where T : State, IStateMachine
@@ -461,7 +446,7 @@ namespace VaporStateMachine
         {
             InitTransition(transition);
 
-            transitionsFromAny[layer].Add(transition);
+            _transitionsFromAny[layer].Add(transition);
         }
 
         /// <summary>
@@ -489,10 +474,10 @@ namespace VaporStateMachine
         {
             InitTransition(transition);
 
-            if (!triggerTransitionsFromAny[layer].TryGetValue(trigger, out List<Transition> transitionsOfTrigger))
+            if (!_triggerTransitionsFromAny[layer].TryGetValue(trigger, out List<Transition> transitionsOfTrigger))
             {
                 transitionsOfTrigger = new List<Transition>();
-                triggerTransitionsFromAny[layer].Add(trigger, transitionsOfTrigger);
+                _triggerTransitionsFromAny[layer].Add(trigger, transitionsOfTrigger);
             }
 
             transitionsOfTrigger.Add(transition);
@@ -555,7 +540,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllDirectTransitions(int layer)
         {
-            if (DetermineTransition(activeTransitions[layer], layer, out var to))
+            if (DetermineTransition(_activeTransitions[layer], layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -572,7 +557,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllGlobalTransitions(int layer)
         {
-            if (DetermineTransition(transitionsFromAny[layer], layer, out var to))
+            if (DetermineTransition(_transitionsFromAny[layer], layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -590,7 +575,7 @@ namespace VaporStateMachine
             foreach (Transition transition in transitions)
             {
                 // Don't transition to the "to" state, if that state is already the active state
-                if (transition.To == activeStates[layer].ID)
+                if (transition.To == _activeStates[layer].ID)
                 {
                     continue;
                 }
@@ -616,7 +601,7 @@ namespace VaporStateMachine
         {
             EnsureIsInitializedFor();
 
-            if (triggerTransitionsFromAny[layer].TryGetValue(trigger, out List<Transition> triggerTransitions))
+            if (_triggerTransitionsFromAny[layer].TryGetValue(trigger, out List<Transition> triggerTransitions))
             {
                 if (DetermineTransition(triggerTransitions, layer, out var to))
                 {
@@ -625,7 +610,7 @@ namespace VaporStateMachine
                 }
             }
 
-            if (activeTriggerTransitions[layer].TryGetValue(trigger, out triggerTransitions))
+            if (_activeTriggerTransitions[layer].TryGetValue(trigger, out triggerTransitions))
             {
                 if (DetermineTransition(triggerTransitions, layer, out var to))
                 {
@@ -661,7 +646,7 @@ namespace VaporStateMachine
 		public void OnInvokeAction(int actionID, int layer)
         {
             EnsureIsInitializedFor();
-            activeStates[layer]?.OnAction(actionID);
+            _activeStates[layer]?.OnAction(actionID);
         }
 
         /// <summary>
@@ -674,19 +659,82 @@ namespace VaporStateMachine
         public void OnInvokeAction<TData>(int actionID, int layer, TData data)
         {
             EnsureIsInitializedFor();
-            activeStates[layer]?.OnAction(actionID, data);
+            _activeStates[layer]?.OnAction(actionID, data);
         }
         #endregion
 
         #region - Pooling -
         public override void RemoveFromPool()
         {
-
+            foreach (var sb in _nameToStateBundle.Values)
+            {
+                sb.State.StateMachine = this;
+                sb.State.RemoveFromPool();
+            }
         }
 
         public override void OnReturnedToPool()
         {
+            base.OnReturnedToPool();
+            for (int i = 0; i < _activeStates.Count; i++)
+            {
+                _activeStates[i] = null;
+            }
 
+            for (int i = 0; i < _layerCount; i++)
+            {
+                int layer = i;
+                _startStates[i] = (layer, EMPTY_STATE, false);
+            }
+
+            for (int i = 0; i < _layerCount; i++)
+            {
+                int layer = i;
+                _pendingStates[i] = (layer, EMPTY_STATE, false);
+            }
+
+            for (int i = 0; i < _layerCount; i++)
+            {
+                int layer = i;
+                _activeTransitions[layer] = noTransitions;
+                _activeTriggerTransitions[layer] = noTriggerTransitions;
+            }
+
+            foreach (var sb in _nameToStateBundle.Values)
+            {
+                sb.State.OnReturnedToPool();
+            }
+        }
+        #endregion
+
+        #region - Logging -
+        public void AttachLogger(StateLogger logger)
+        {
+            if (IsRoot)
+            {
+                _logger = logger;
+                _layerLog = _logger.GetSubLayerLog();
+                foreach (var sb in _nameToStateBundle.Values)
+                {
+                    if (sb.State is IStateMachine fsm)
+                    {
+                        fsm.AttachSubLayerLogger(_layerLog);
+                    }
+                }
+                _logger.Reset();
+            }
+        }
+
+        public void AttachSubLayerLogger(StateLogger.LayerLog logger)
+        {
+            _layerLog = logger.GetOrCreateSubLayer();
+            foreach (var sb in _nameToStateBundle.Values)
+            {
+                if (sb.State is IStateMachine fsm)
+                {
+                    fsm.AttachSubLayerLogger(_layerLog);
+                }
+            }
         }
         #endregion
     }

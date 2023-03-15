@@ -7,14 +7,14 @@ namespace VaporStateMachine
 {
     public class StateMachineExceptions
     {
-        public static string StateMachineNotInitialized => $"The state machine has not been initialized.\n" +
+        public static string StateMachineNotInitialized => $"The State machine has not been initialized.\n" +
                 $"Call SetDefaultState, Init(), or OnEnter to initialize.";
 
         public static string StateNotFound(string state)
         {
-            return $"The state <b>[{state}]</b> does not exist.\n" +
-                "Check for typos in the state names.\n" +
-                "Ensure the state is in the state machine.";
+            return $"The State <b>[{state}]</b> does not exist.\n" +
+                "Check for typos in the State names.\n" +
+                "Ensure the State is in the State machine.";
         }
 
         public static string ActionTypeMismatch(Type type, Delegate action)
@@ -22,6 +22,6 @@ namespace VaporStateMachine
             return $"The expected argument type ({type}) does not match the type of the added action ({action}).";
         }
 
-        public static string NoDefaultStateFound => $"The state machine does not have any states before OnEnter was called.";
+        public static string NoDefaultStateFound => $"The State machine does not have any states before OnEnter was called.";
     }
 }

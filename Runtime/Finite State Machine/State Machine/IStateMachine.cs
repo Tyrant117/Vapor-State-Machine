@@ -14,5 +14,7 @@ namespace VaporStateMachine
 
         void RequestStateChange(int name, bool force = false);
         void RequestStateChange(int layer, int name, bool force = false);
+        void AttachLogger(StateLogger logger);
+        void AttachSubLayerLogger(StateLogger.LayerLog logger);
     }
 }
