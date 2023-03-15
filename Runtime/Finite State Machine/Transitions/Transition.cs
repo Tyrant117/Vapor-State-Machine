@@ -32,6 +32,15 @@ namespace VaporStateMachine
             _inverse = false;
         }
 
+        public Transition(State from, State to, int desire, Func<Transition, bool> condition = null)
+        {
+            From = from.ID;
+            To = to.ID;
+            Desire = desire;
+            Condition = condition;
+            _inverse = false;
+        }
+
         public Transition(int from, int to, int desire, bool inverse, Func<Transition, bool> condition = null)
         {
             From = from;
@@ -40,6 +49,7 @@ namespace VaporStateMachine
             _inverse = inverse;
             Condition = condition;
         }
+        
 
         /// <summary>
 		/// Called to initialise the transition, after values like mono and fsm have been set

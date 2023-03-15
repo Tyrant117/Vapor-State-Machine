@@ -1,11 +1,17 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace VaporStateMachine
 {
     public class StateMachine : State, IStateMachine
     {
+        static readonly ProfilerMarker s_EnterMarker = new(ProfilerCategory.Scripts, "Vapor.StateMachine.Enter");
+        static readonly ProfilerMarker s_UpdateMarker = new(ProfilerCategory.Scripts, "Vapor.StateMachine.Update");
+        static readonly ProfilerMarker s_ExitMarker = new(ProfilerCategory.Scripts, "Vapor.StateMachine.Exit");
+        static readonly ProfilerMarker s_ChangeStateMarker = new(ProfilerCategory.Scripts, "Vapor.StateMachine.ChangeState");
+
         /// <summary>
 		/// A bundle of a state together with the outgoing transitions and trigger transitions.
 		/// It's useful, as you only need to do one Dictionary lookup for these three items.
@@ -49,7 +55,7 @@ namespace VaporStateMachine
             }
         }
         public int ActiveStateID => ActiveState.ID;
-        public string ActiveStatename => ActiveState.Name;
+        public string ActiveStateName => ActiveState.Name;
         public bool IsRoot => StateMachine == null;
 
         private (int state, bool hasState) startState = (EMPTY_STATE, false);
@@ -105,6 +111,15 @@ namespace VaporStateMachine
         }
 
         /// <summary>
+        /// Defines the entry point of the state machine
+        /// </summary>
+        /// <param name="name">The name / identifier of the start state</param>
+        public void SetDefaultState(State state)
+        {
+            startState = (state.ID, true);
+        }
+
+        /// <summary>
 		/// Calls OnEnter if it is the root machine, therefore initialising the state machine
 		/// </summary>
 		public override void Init()
@@ -122,6 +137,7 @@ namespace VaporStateMachine
 		/// </summary>
 		public override void OnEnter()
         {
+            s_EnterMarker.Begin();
             if (!startState.hasState)
             {
                 Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
@@ -141,6 +157,7 @@ namespace VaporStateMachine
                     t.OnEnter();
                 }
             }
+            s_EnterMarker.End();
         }
 
         /// <summary>
@@ -150,6 +167,7 @@ namespace VaporStateMachine
 		/// </summary>
 		public override void OnUpdate()
         {
+            s_UpdateMarker.Begin();
             EnsureIsInitializedFor();
 
             if (!TryAllGlobalTransitions())
@@ -158,10 +176,12 @@ namespace VaporStateMachine
             }
 
             activeState.OnUpdate();
+            s_UpdateMarker.End();
         }
 
         public override void OnExit()
         {
+            s_ExitMarker.Begin();
             if (activeState != null)
             {
                 activeState.OnExit();
@@ -169,6 +189,7 @@ namespace VaporStateMachine
                 // a second time when the state machine enters again (and changes to the start state)
                 activeState = null;
             }
+            s_ExitMarker.End();
         }
 
         /// <summary>
@@ -202,6 +223,7 @@ namespace VaporStateMachine
 		/// <param name="name">The name / identifier of the active state</param>
 		private void ChangeState(int name)
         {
+            s_ChangeStateMarker.Begin();
             activeState?.OnExit();
 
             if (!nameToStateBundle.TryGetValue(name, out StateBundle bundle) || bundle.state == null)
@@ -239,6 +261,7 @@ namespace VaporStateMachine
             {
                 TryAllDirectTransitions();
             }
+            s_ChangeStateMarker.End();
         }
 
         /// <summary>
@@ -611,6 +634,18 @@ namespace VaporStateMachine
         {
             EnsureIsInitializedFor();
             activeState?.OnAction(actionID, data);
+        }
+        #endregion
+
+        #region - Pooling -
+        public override void RemoveFromPool()
+        {
+
+        }
+
+        public override void OnReturnedToPool()
+        {
+
         }
         #endregion
     }

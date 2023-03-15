@@ -2,6 +2,7 @@ using JetBrains.Annotations;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace VaporStateMachine
@@ -41,7 +42,7 @@ namespace VaporStateMachine
         }
 
 
-        private Dictionary<int, State> activeStates = null;
+        private Dictionary<int, State> activeStates = new();
         public Dictionary<int, State> ActiveStates
         {
             get
@@ -73,8 +74,8 @@ namespace VaporStateMachine
         
         public bool IsRoot => StateMachine == null;
 
-        private (int layer, int state, bool hasState) startState = (0, EMPTY_STATE, false);
-        private (int layer, int state, bool isPending) pendingState = (0, EMPTY_STATE, false);
+        private Dictionary<int, (int layer, int state, bool hasState)> startStates = new();
+        private Dictionary<int, (int layer, int state, bool isPending)> pendingStates = new();
 
         // A cached empty list of transitions (For improved readability, less GC)
         private static readonly List<Transition> noTransitions = new(0);
@@ -89,6 +90,8 @@ namespace VaporStateMachine
 
         private readonly Dictionary<int, List<Transition>> transitionsFromAny = new();
         private readonly Dictionary<int, Dictionary<int, List<Transition>>> triggerTransitionsFromAny = new();
+
+        private int _layerCount;
 
         #region - Initialization -
         public LayeredStateMachine(string name, bool canExitInstantly = false) : base(name, canExitInstantly)
@@ -118,9 +121,18 @@ namespace VaporStateMachine
         /// Defines the entry point of the state machine
         /// </summary>
         /// <param name="name">The name / identifier of the start state</param>
-        public void SetDefaultState(int name)
+        public void SetDefaultState(int name, int layer)
         {
-            startState = (0, name, true);
+            startStates[layer] = (layer, name, true);
+        }
+
+        /// <summary>
+        /// Defines the entry point of the state machine
+        /// </summary>
+        /// <param name="name">The name / identifier of the start state</param>
+        public void SetDefaultState(State name, int layer)
+        {
+            startStates[layer] = (layer, name.ID, true);
         }
 
         /// <summary>
@@ -141,12 +153,22 @@ namespace VaporStateMachine
 		/// </summary>
 		public override void OnEnter()
         {
-            if (!startState.hasState)
+            foreach (var startingState in startStates.Values)
+            {
+                if (!startingState.hasState)
+                {
+                    Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
+                }
+            }
+            if(startStates.Count == 0)
             {
                 Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
             }
 
-            ChangeState(startState.layer, startState.state);
+            foreach (var startingState in startStates.Values)
+            {
+                ChangeState(startingState.layer, startingState.state);
+            }
 
             foreach (var layer in transitionsFromAny.Values)
             {
@@ -177,14 +199,14 @@ namespace VaporStateMachine
         {
             EnsureIsInitializedFor();
 
-            foreach (var state in activeStates)
+            for (int i = 0; i < _layerCount; i++)
             {
-                if (!TryAllGlobalTransitions(state.Key))
+                if (!TryAllGlobalTransitions(i))
                 {
-                    TryAllDirectTransitions(state.Key);
+                    TryAllDirectTransitions(i);
                 }
 
-                state.Value.OnUpdate();
+                activeStates[i].OnUpdate();
             }
         }
 
@@ -208,16 +230,20 @@ namespace VaporStateMachine
         /// </summary>
         public void StateCanExit()
         {
-            if (pendingState.isPending)
+            for (int i = 0; i < _layerCount; i++)
             {
-                int layer = pendingState.layer;
-                int state = pendingState.state;
-                // When the pending state is a ghost state, ChangeState() will have
-                // to try all outgoing transitions, which may overwrite the pendingState.
-                // That's why it is first cleared, and not afterwards, as that would overwrite
-                // a new, valid pending state.
-                pendingState = (layer, EMPTY_STATE, false);
-                ChangeState(layer, state);
+                var pendingState = pendingStates[i];
+                if (pendingState.isPending)
+                {
+                    int layer = pendingState.layer;
+                    int state = pendingState.state;
+                    // When the pending state is a ghost state, ChangeState() will have
+                    // to try all outgoing transitions, which may overwrite the pendingState.
+                    // That's why it is first cleared, and not afterwards, as that would overwrite
+                    // a new, valid pending state.
+                    pendingStates[layer] = (layer, EMPTY_STATE, false);
+                    ChangeState(layer, state);
+                }
             }
 
             StateMachine?.StateCanExit();
@@ -287,7 +313,7 @@ namespace VaporStateMachine
             }
             else
             {
-                pendingState = (layer, name, true);
+                pendingStates[layer] = (layer, name, true);
                 activeStates[layer].OnExitRequest();
                 /**
 				 * If it can exit, the activeState would call
@@ -311,7 +337,7 @@ namespace VaporStateMachine
             }
             else
             {
-                pendingState = (0, name, true);
+                pendingStates[0] = (0, name, true);
                 activeStates[0].OnExitRequest();
                 /**
 				 * If it can exit, the activeState would call
@@ -355,9 +381,13 @@ namespace VaporStateMachine
             bundle.state = state;
             stateToStringMap.Add(new(layer, state.ID), state.Name);
 
-            if (nameToStateBundle.Count == 1 && !startState.hasState && layer == 0)
+            if (!startStates.ContainsKey(layer) || !startStates[layer].hasState)
             {
-                SetDefaultState(state.ID);
+                SetDefaultState(state.ID, layer);
+                pendingStates[layer] = (layer, state.ID, false);
+                activeStates.Add(layer, null);
+                transitionsFromAny.Add(layer, new());
+                _layerCount++;
             }
         }
 
@@ -645,6 +675,18 @@ namespace VaporStateMachine
         {
             EnsureIsInitializedFor();
             activeStates[layer]?.OnAction(actionID, data);
+        }
+        #endregion
+
+        #region - Pooling -
+        public override void RemoveFromPool()
+        {
+
+        }
+
+        public override void OnReturnedToPool()
+        {
+
         }
         #endregion
     }

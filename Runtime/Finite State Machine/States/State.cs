@@ -1,3 +1,4 @@
+using Codice.CM.Common;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -42,6 +43,13 @@ namespace VaporStateMachine
             Exited = exited;
 
             Timer = new();
+        }
+
+        public void InitEvents(Action<State> entered = null, Action<State> updated = null, Action<State> exited = null)
+        {
+            Entered = entered;
+            Updated = updated;
+            Exited = exited;
         }
 
         public virtual void Init()
@@ -141,6 +149,25 @@ namespace VaporStateMachine
         /// <param name="data">Data to pass as the first parameter to the action</param>
         /// <typeparam name="TData">Type of the data parameter</typeparam>
         public void OnAction<TData>(int actionID, TData data) => TryGetAndCastAction<Action<TData>>(actionID)?.Invoke(data);
+        #endregion
+
+        #region - Pooling -
+        public virtual void RemoveFromPool()
+        {
+
+        }
+
+        public virtual void OnReturnedToPool()
+        {
+            // Clear StateMachine
+            StateMachine = null;
+            // Clear Events
+            Entered = null;
+            Updated = null;
+            Exited = null;
+            // Clear Actions
+            ActionsByEventMap.Clear();
+        }
         #endregion
     }
 }
