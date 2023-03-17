@@ -588,7 +588,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllDirectTransitions(int layer)
         {
-            if (DetermineTransition(_activeTransitions[layer], layer, out var to))
+            if (DetermineTransition(_activeTransitions[layer], true, layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -605,7 +605,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllGlobalTransitions(int layer)
         {
-            if (DetermineTransition(_transitionsFromAny[layer], layer, out var to))
+            if (DetermineTransition(_transitionsFromAny[layer], false, layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -616,14 +616,14 @@ namespace VaporStateMachine
             }
         }
 
-        private bool DetermineTransition(List<Transition> transitions, int layer, out int ToState)
+        private bool DetermineTransition(List<Transition> transitions, bool canTransitionOnSelf, int layer, out int ToState)
         {
             int desire = 0;
             ToState = EMPTY_STATE;
             foreach (Transition transition in transitions)
             {
                 // Don't transition to the "to" state, if that state is already the active state
-                if (transition.To == _activeStates[layer].ID)
+                if (!canTransitionOnSelf && transition.To == _activeStates[layer].ID)
                 {
                     continue;
                 }
@@ -651,7 +651,7 @@ namespace VaporStateMachine
 
             if (_triggerTransitionsFromAny[layer].TryGetValue(trigger, out List<Transition> triggerTransitions))
             {
-                if (DetermineTransition(triggerTransitions, layer, out var to))
+                if (DetermineTransition(triggerTransitions, false, layer, out var to))
                 {
                     RequestStateChange(layer, to);
                     return true;
@@ -660,7 +660,7 @@ namespace VaporStateMachine
 
             if (_activeTriggerTransitions[layer].TryGetValue(trigger, out triggerTransitions))
             {
-                if (DetermineTransition(triggerTransitions, layer, out var to))
+                if (DetermineTransition(triggerTransitions, true, layer, out var to))
                 {
                     RequestStateChange(layer, to);
                     return true;

@@ -539,7 +539,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllDirectTransitions()
         {
-            if (DetermineTransition(activeTransitions, out var to))
+            if (DetermineTransition(activeTransitions, true, out var to))
             {
                 RequestStateChange(to);
                 return true;
@@ -556,7 +556,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllGlobalTransitions()
         {
-            if (DetermineTransition(_transitionsFromAny, out var to))
+            if (DetermineTransition(_transitionsFromAny, false, out var to))
             {
                 RequestStateChange(to);
                 return true;
@@ -567,14 +567,14 @@ namespace VaporStateMachine
             }
         }
 
-        private bool DetermineTransition(List<Transition> transitions, out Transition ToStateTransition)
+        private bool DetermineTransition(List<Transition> transitions, bool canTransitionOnSelf, out Transition ToStateTransition)
         {
             int desire = 0;
             ToStateTransition = null;
             foreach (Transition transition in transitions)
             {
                 // Don't transition to the "to" state, if that state is already the active state
-                if (transition.To == _activeState.ID)
+                if (!canTransitionOnSelf && transition.To == _activeState.ID)
                 {
                     continue;
                 }
@@ -602,7 +602,7 @@ namespace VaporStateMachine
 
             if (_triggerTransitionsFromAny.TryGetValue(trigger, out List<Transition> triggerTransitions))
             {
-                if (DetermineTransition(triggerTransitions, out var to))
+                if (DetermineTransition(triggerTransitions, false, out var to))
                 {
                     RequestStateChange(to);
                     return true;
@@ -611,7 +611,7 @@ namespace VaporStateMachine
 
             if (activeTriggerTransitions.TryGetValue(trigger, out triggerTransitions))
             {
-                if (DetermineTransition(triggerTransitions, out var to))
+                if (DetermineTransition(triggerTransitions, true, out var to))
                 {
                     RequestStateChange(to);
                     return true;
