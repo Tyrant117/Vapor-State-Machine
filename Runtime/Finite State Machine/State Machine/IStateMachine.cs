@@ -10,10 +10,12 @@ namespace VaporStateMachine
 		/// Tells the state machine that, if there is a state transition pending,
 		/// now is the time to perform it.
 		/// </summary>
-		void StateCanExit();
+		void StateCanExit(Transition transition = null);
 
         void RequestStateChange(int name, bool force = false);
+        void RequestStateChange(Transition transition, bool force = false);
         void RequestStateChange(int layer, int name, bool force = false);
+        void RequestStateChange(int layer, Transition transition, bool force = false);
         void AttachLogger(StateLogger logger);
         void AttachSubLayerLogger(StateLogger.LayerLog logger);
     }

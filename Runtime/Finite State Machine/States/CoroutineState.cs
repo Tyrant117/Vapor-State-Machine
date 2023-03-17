@@ -14,12 +14,12 @@ namespace VaporStateMachine
 
         public bool CoroutineIsComplete { get; private set; }
 
-        public CoroutineState(MonoBehaviour runner, string name, bool canExitInstantly, Action<State> entered = null, Func<CoroutineState, IEnumerator> updated = null, Action<State> exited = null) : base(name, canExitInstantly, entered, null, exited)
+        public CoroutineState(MonoBehaviour runner, string name, bool canExitInstantly, Action<State> entered = null, Func<CoroutineState, IEnumerator> updated = null, Action<State, Transition> exited = null) : base(name, canExitInstantly, entered, null, exited)
         {
             _runner = runner;
             OnCoroutineUpdated = updated;
         }
-        public CoroutineState(MonoBehaviour runner, string name, bool canExitInstantly, bool exitAfterCoroutine, Action<State> entered = null, Func<CoroutineState, IEnumerator> updated = null, Action<State> exited = null) 
+        public CoroutineState(MonoBehaviour runner, string name, bool canExitInstantly, bool exitAfterCoroutine, Action<State> entered = null, Func<CoroutineState, IEnumerator> updated = null, Action<State, Transition> exited = null) 
             : base(name, canExitInstantly, entered, null, exited)
         {
             _runner = runner;
@@ -80,7 +80,7 @@ namespace VaporStateMachine
             }
         }
 
-        public override void OnExit()
+        public override void OnExit(Transition transition)
         {
             if (_routine != null)
             {
@@ -88,7 +88,7 @@ namespace VaporStateMachine
                 _routine = null;
             }
             CoroutineIsComplete = false;
-            base.OnExit();
+            base.OnExit(transition);
         }
     }
 }

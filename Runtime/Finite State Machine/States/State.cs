@@ -29,10 +29,10 @@ namespace VaporStateMachine
 
         protected Action<State> Entered;
         protected Action<State> Updated;
-        protected Action<State> Exited;
+        protected Action<State, Transition> Exited;
         protected Dictionary<int, Delegate> ActionsByEventMap = new();
 
-        public State(string name, bool canExitInstantly, Action<State> entered = null, Action<State> updated = null, Action<State> exited = null)
+        public State(string name, bool canExitInstantly, Action<State> entered = null, Action<State> updated = null, Action<State, Transition> exited = null)
         {
             Name = name;
             ID = name.GetHashCode();
@@ -45,7 +45,7 @@ namespace VaporStateMachine
             Timer = new();
         }
 
-        public void InitEvents(Action<State> entered = null, Action<State> updated = null, Action<State> exited = null)
+        public void InitEvents(Action<State> entered = null, Action<State> updated = null, Action<State, Transition> exited = null)
         {
             Entered = entered;
             Updated = updated;
@@ -69,12 +69,12 @@ namespace VaporStateMachine
             Updated?.Invoke(this);
         }
 
-        public virtual void OnExit()
+        public virtual void OnExit(Transition transition)
         {
-            Exited?.Invoke(this);
+            Exited?.Invoke(this, transition);
         }
 
-        public virtual void OnExitRequest()
+        public virtual void OnExitRequest(Transition transition = null)
         {
             StateMachine.StateCanExit();
         }

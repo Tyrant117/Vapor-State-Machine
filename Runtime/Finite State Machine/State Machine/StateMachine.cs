@@ -150,12 +150,12 @@ namespace VaporStateMachine
             s_UpdateMarker.End();
         }
 
-        public override void OnExit()
+        public override void OnExit(Transition transition)
         {
             s_ExitMarker.Begin();
             if (_activeState != null)
             {
-                _activeState.OnExit();
+                _activeState.OnExit(transition);
                 // By setting the activeState to null, the state's onExit method won't be called
                 // a second time when the state machine enters again (and changes to the start state)
                 _activeState = null;
@@ -167,7 +167,7 @@ namespace VaporStateMachine
         /// Notifies the state machine that the state can cleanly exit,
         /// and if a state change is pending, it will execute it.
         /// </summary>
-        public void StateCanExit()
+        public void StateCanExit(Transition transition = null)
         {
             if (_pendingState.isPending)
             {
@@ -177,40 +177,40 @@ namespace VaporStateMachine
                 // That's why it is first cleared, and not afterwards, as that would overwrite
                 // a new, valid pending state.
                 _pendingState = (EMPTY_STATE, false);
-                ChangeState(state);
+                ChangeState(state, transition);
             }
 
-            StateMachine?.StateCanExit();
+            StateMachine?.StateCanExit(transition);
         }
 
-        public override void OnExitRequest()
+        public override void OnExitRequest(Transition transition = null)
         {
-            StateMachine?.StateCanExit();
+            StateMachine?.StateCanExit(transition);
         }
 
         /// <summary>
 		/// Instantly changes to the target state
 		/// </summary>
 		/// <param name="name">The name / identifier of the active state</param>
-		private void ChangeState(int name)
+		private void ChangeState(int id, Transition transition = null)
         {
             s_ChangeStateMarker.Begin();
 
             if (_activeState != null)
             {
                 _layerLog?.LogExit(_activeState.Name);
-                _activeState.OnExit();
+                _activeState.OnExit(transition);
             }
 
-            if (!_nameToStateBundle.TryGetValue(name, out StateBundle bundle) || bundle.State == null)
+            if (!_nameToStateBundle.TryGetValue(id, out StateBundle bundle) || bundle.State == null)
             {
-                if (_stateToStringMap.TryGetValue(name, out string nameString))
+                if (_stateToStringMap.TryGetValue(id, out string nameString))
                 {
                     Debug.LogError(StateMachineExceptions.StateNotFound(nameString));
                 }
                 else
                 {
-                    Debug.LogError(StateMachineExceptions.StateNotFound(name.ToString()));
+                    Debug.LogError(StateMachineExceptions.StateNotFound(id.ToString()));
                 }
             }
 
@@ -244,19 +244,43 @@ namespace VaporStateMachine
         /// <summary>
 		/// Requests a state change, respecting the <c>needsExitTime</c> property of the active state
 		/// </summary>
-		/// <param name="name">The name / identifier of the target state</param>
+		/// <param name="id">The name / identifier of the target state</param>
 		/// <param name="forceInstantly">Overrides the needsExitTime of the active state if true,
 		/// therefore forcing an immediate state change</param>
-		public void RequestStateChange(int name, bool force = false)
+		public void RequestStateChange(int id, bool force = false)
         {
             if (force)
             {
-                ChangeState(name);
+                ChangeState(id);
             }
             else
             {
-                _pendingState = (name, true);
+                _pendingState = (id, true);
                 _activeState.OnExitRequest();
+                /**
+				 * If it can exit, the activeState would call
+				 * -> state.fsm.StateCanExit() which in turn would call
+				 * -> fsm.ChangeState(...)
+				 */
+            }
+        }
+
+        /// <summary>
+		/// Requests a state change, respecting the <c>needsExitTime</c> property of the active state
+		/// </summary>
+		/// <param name="name">The name / identifier of the target state</param>
+		/// <param name="forceInstantly">Overrides the needsExitTime of the active state if true,
+		/// therefore forcing an immediate state change</param>
+		public void RequestStateChange(Transition transition, bool force = false)
+        {
+            if (force)
+            {
+                ChangeState(transition.To, transition);
+            }
+            else
+            {
+                _pendingState = (transition.To, true);
+                _activeState.OnExitRequest(transition);
                 /**
 				 * If it can exit, the activeState would call
 				 * -> state.fsm.StateCanExit() which in turn would call
@@ -281,6 +305,30 @@ namespace VaporStateMachine
             {
                 _pendingState = (name, true);
                 _activeState.OnExitRequest();
+                /**
+				 * If it can exit, the activeState would call
+				 * -> state.fsm.StateCanExit() which in turn would call
+				 * -> fsm.ChangeState(...)
+				 */
+            }
+        }
+
+        /// <summary>
+        /// Requests a state change, respecting the <c>needsExitTime</c> property of the active state
+        /// </summary>
+        /// <param name="name">The name / identifier of the target state</param>
+        /// <param name="forceInstantly">Overrides the needsExitTime of the active state if true,
+        /// therefore forcing an immediate state change</param>
+        public void RequestStateChange(int layer, Transition transition, bool force = false)
+        {
+            if (force)
+            {
+                ChangeState(transition.To, transition);
+            }
+            else
+            {
+                _pendingState = (transition.To, true);
+                _activeState.OnExitRequest(transition);
                 /**
 				 * If it can exit, the activeState would call
 				 * -> state.fsm.StateCanExit() which in turn would call
@@ -519,10 +567,10 @@ namespace VaporStateMachine
             }
         }
 
-        private bool DetermineTransition(List<Transition> transitions, out int ToState)
+        private bool DetermineTransition(List<Transition> transitions, out Transition ToStateTransition)
         {
             int desire = 0;
-            ToState = EMPTY_STATE;
+            ToStateTransition = null;
             foreach (Transition transition in transitions)
             {
                 // Don't transition to the "to" state, if that state is already the active state
@@ -534,10 +582,10 @@ namespace VaporStateMachine
                 int d = TryTransition(transition);
                 if (d > desire)
                 {
-                    ToState = transition.To;
+                    ToStateTransition = transition;
                 }
             }
-            return ToState != EMPTY_STATE;
+            return ToStateTransition != null;
         }
         #endregion
 
