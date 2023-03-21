@@ -369,7 +369,7 @@ namespace VaporStateMachine
 
             StateBundle bundle = GetOrCreateStateBundle(state.ID);
             bundle.State = state;
-            _stateToStringMap.Add(state.ID, state.Name);
+            _stateToStringMap[state.ID] = state.Name;
 
             if (_nameToStateBundle.Count == 1 && !_startState.hasState)
             {

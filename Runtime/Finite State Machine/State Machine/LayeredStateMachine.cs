@@ -412,14 +412,14 @@ namespace VaporStateMachine
 
             StateBundle bundle = GetOrCreateStateBundle(layer, state.ID);
             bundle.State = state;
-            _stateToStringMap.Add(new(layer, state.ID), state.Name);
+            _stateToStringMap[new(layer, state.ID)] = state.Name;
 
             if (!_startStates.ContainsKey(layer) || !_startStates[layer].hasState)
             {
                 SetDefaultState(state.ID, layer);
                 _pendingStates[layer] = (layer, state.ID, false);
-                _activeStates.Add(layer, null);
-                _transitionsFromAny.Add(layer, new());
+                _activeStates[layer] = null;
+                _transitionsFromAny[layer] = new();
                 _layerCount++;
             }
         }
