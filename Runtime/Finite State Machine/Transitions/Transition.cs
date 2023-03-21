@@ -14,6 +14,7 @@ namespace VaporStateMachine
         public IStateMachine StateMachine;
 
         public Func<Transition, bool> Condition;
+        public Action Exited;
 
         private readonly bool _inverse;
 
@@ -41,7 +42,7 @@ namespace VaporStateMachine
             _inverse = false;
         }
 
-        public Transition(int from, int to, int desire, bool inverse, Func<Transition, bool> condition = null)
+        protected Transition(int from, int to, int desire, bool inverse, Func<Transition, bool> condition = null)
         {
             From = from;
             To = to;
@@ -63,6 +64,14 @@ namespace VaporStateMachine
 		/// Called when the state machine enters the "from" state
 		/// </summary>
 		public virtual void OnEnter()
+        {
+
+        }
+
+        /// <summary>
+        /// Called when the state machine exits with this transition.
+        /// </summary>
+        public virtual void OnExit()
         {
 
         }

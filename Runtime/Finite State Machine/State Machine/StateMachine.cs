@@ -199,6 +199,7 @@ namespace VaporStateMachine
             if (_activeState != null)
             {
                 _layerLog?.LogExit(_activeState.Name);
+                transition?.OnExit();
                 _activeState.OnExit(transition);
             }
 
