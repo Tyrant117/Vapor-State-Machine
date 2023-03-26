@@ -11,7 +11,7 @@ namespace VaporStateMachine.Interface
         protected Vector3 _delta;
         protected Vector3 _lastDelta;
 
-        public ScaleUIAnimation(RectTransform target, float duration, int iterations, Vector3 finalScale, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease, false)
+        public ScaleUIAnimation(RectTransform target, float duration, int iterations, Vector3 finalScale, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease)
         {
             _target = target;
             _finalScale = finalScale;

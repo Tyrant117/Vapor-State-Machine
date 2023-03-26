@@ -31,13 +31,13 @@ namespace VaporStateMachine.Interface
         internal readonly List<BaseUIAnimation> ParallelAnimations = new();
         internal readonly List<BaseUIAnimation> SequentialAnimations = new();
 
-        public BaseUIAnimation(float duration, int iterations, Easing.Ease ease, bool useDeriviative)
+        public BaseUIAnimation(float duration, int iterations, Easing.Ease ease)
         {
             _duration = duration;
             _iterations = iterations;
             _firstEntry = true;
             _timer = new Timer();
-            _easingFunction = useDeriviative ? Easing.GetEasingFunctionDerviative(ease) : Easing.GetEasingFunction(ease);
+            _easingFunction = Easing.GetEasingFunction(ease);
         }
 
         public void AddParallel(BaseUIAnimation anim)
@@ -142,6 +142,18 @@ namespace VaporStateMachine.Interface
                 {
                     anim.TryPlay();
                 }
+            }
+        }
+
+        public virtual void TriggerNext()
+        {
+            OnSetFinalState();
+            _isPlaying = false;
+            _isCompleting = false;
+            _isPaused = false;
+            foreach (var anim in SequentialAnimations)
+            {
+                anim.TryPlay();
             }
         }
 

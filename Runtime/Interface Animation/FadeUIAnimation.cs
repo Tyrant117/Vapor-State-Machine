@@ -9,7 +9,7 @@ namespace VaporStateMachine.Interface
         protected float _finalAlpha;
         protected float _velocity;
 
-        public FadeUIAnimation(CanvasGroup target, float duration, int iterations, float finalAlpha, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease, false)
+        public FadeUIAnimation(CanvasGroup target, float duration, int iterations, float finalAlpha, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease)
         {
             _target = target;
             _finalAlpha = finalAlpha;

@@ -10,7 +10,7 @@ namespace VaporStateMachine.Interface
         protected Vector3 _velocity;
         protected Vector3 _lastDelta;
 
-        public PositionUIAnimation(RectTransform target, float duration, int iterations, Vector3 delta, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease, false)
+        public PositionUIAnimation(RectTransform target, float duration, int iterations, Vector3 delta, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease)
         {
             _target = target;
             _delta = delta;

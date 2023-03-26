@@ -9,7 +9,7 @@ namespace VaporStateMachine.Interface
         protected Vector2 _finalSize;
         protected Vector2 _velocity;
 
-        public ResizeUIAnimation(RectTransform target, float duration, int iterations, Vector2 finalSize, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease, false)
+        public ResizeUIAnimation(RectTransform target, float duration, int iterations, Vector2 finalSize, Easing.Ease ease = Easing.Ease.Linear) : base(duration, iterations, ease)
         {
             _target = target;
             _finalSize = finalSize;

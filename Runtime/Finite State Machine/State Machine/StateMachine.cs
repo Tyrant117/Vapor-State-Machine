@@ -586,6 +586,7 @@ namespace VaporStateMachine
                 if (d > desire)
                 {
                     ToStateTransition = transition;
+                    desire = d;
                 }
             }
             return ToStateTransition != null;

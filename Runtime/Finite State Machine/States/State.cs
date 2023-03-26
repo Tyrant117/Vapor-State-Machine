@@ -80,7 +80,7 @@ namespace VaporStateMachine
 
         public virtual void OnExitRequest(Transition transition = null)
         {
-            StateMachine.StateCanExit();
+            StateMachine.StateCanExit(transition);
         }
 
         #region - Actions -
