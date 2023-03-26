@@ -27,6 +27,8 @@ namespace VaporStateMachine
         public IStateMachine StateMachine;
         public Timer Timer;
 
+        public bool IsPlaying { get; protected set; }
+
         protected Action<State> Entered;
         protected Action<State> Updated;
         protected Action<State, Transition> Exited;
@@ -59,6 +61,7 @@ namespace VaporStateMachine
 
         public virtual void OnEnter()
         {
+            IsPlaying = true;
             Timer.Reset();
 
             Entered?.Invoke(this);
@@ -71,6 +74,7 @@ namespace VaporStateMachine
 
         public virtual void OnExit(Transition transition)
         {
+            IsPlaying = false;
             Exited?.Invoke(this, transition);
         }
 

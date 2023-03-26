@@ -114,6 +114,7 @@ namespace VaporStateMachine
                 Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
             }
 
+            base.OnEnter();
             ChangeState(_startState.state);
 
             foreach (var t in _transitionsFromAny)
@@ -140,7 +141,7 @@ namespace VaporStateMachine
         {
             s_UpdateMarker.Begin();
             EnsureIsInitializedFor();
-
+            base.OnUpdate();
             if (!TryAllGlobalTransitions())
             {
                 TryAllDirectTransitions();
@@ -153,6 +154,7 @@ namespace VaporStateMachine
         public override void OnExit(Transition transition)
         {
             s_ExitMarker.Begin();
+            base.OnExit(transition);
             if (_activeState != null)
             {
                 _activeState.OnExit(transition);

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.Profiling;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace VaporStateMachine
 {
@@ -42,6 +43,9 @@ namespace VaporStateMachine
         }
         
         public bool IsRoot => StateMachine == null;
+        private bool _isActive;
+        public bool IsActive => _isActive;
+        public int NextLayer => _layerCount;
 
         private readonly Dictionary<int, (int layer, int state, bool hasState)> _startStates = new();
         private readonly Dictionary<int, (int layer, int state, bool isPending)> _pendingStates = new();
@@ -82,11 +86,7 @@ namespace VaporStateMachine
             {
                 Debug.LogError(StateMachineExceptions.StateMachineNotInitialized);
                 return;
-            }
-            if (_activeStates.Count == 0)
-            {
-                Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
-            }
+            }          
         }
 
         /// <summary>
@@ -115,6 +115,7 @@ namespace VaporStateMachine
             if (!IsRoot) return;
 
             OnEnter();
+            _isActive = true;
         }
         #endregion
 
@@ -126,21 +127,18 @@ namespace VaporStateMachine
 		public override void OnEnter()
         {
             s_EnterMarker.Begin();
-            foreach (var startingState in _startStates.Values)
+            foreach (var (_, _, hasState) in _startStates.Values)
             {
-                if (!startingState.hasState)
+                if (!hasState)
                 {
                     Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
                 }
             }
-            if(_startStates.Count == 0)
-            {
-                Debug.LogError(StateMachineExceptions.NoDefaultStateFound);
-            }
 
-            foreach (var startingState in _startStates.Values)
+            base.OnEnter();
+            foreach (var (layer, state, hasState) in _startStates.Values)
             {
-                ChangeState(startingState.layer, startingState.state);
+                ChangeState(layer, state);
             }
 
             foreach (var layer in _transitionsFromAny.Values)
@@ -173,7 +171,7 @@ namespace VaporStateMachine
         {
             s_UpdateMarker.Begin();
             EnsureIsInitializedFor();
-
+            base.OnUpdate();
             for (int i = 0; i < _layerCount; i++)
             {
                 if (!TryAllGlobalTransitions(i))
@@ -181,7 +179,7 @@ namespace VaporStateMachine
                     TryAllDirectTransitions(i);
                 }
 
-                _activeStates[i].OnUpdate();
+                _activeStates[i]?.OnUpdate();
             }
             s_UpdateMarker.End();
         }
@@ -189,13 +187,15 @@ namespace VaporStateMachine
         public override void OnExit(Transition transition)
         {
             s_ExitMarker.Begin();
+            base.OnExit(transition);
             if (_activeStates != null && _activeStates.Count > 0)
             {
-                foreach (var state in _activeStates)
+                for (int i = 0; i < _layerCount; i++)
                 {
-                    state.Value.OnExit(transition);
-                    _activeStates[state.Key] = null;
+                    _activeStates[i]?.OnExit(transition);
+                    _activeStates[i] = null;
                 }
+                    
                 // By setting the activeState to null, the state's onExit method won't be called
                 // a second time when the state machine enters again (and changes to the start state)
             }
@@ -300,7 +300,14 @@ namespace VaporStateMachine
             else
             {
                 _pendingStates[layer] = (layer, name, true);
-                _activeStates[layer].OnExitRequest();
+                if (_activeStates[layer] == null)
+                {
+                    StateCanExit();
+                }
+                else
+                {
+                    _activeStates[layer].OnExitRequest();
+                }
                 /**
 				 * If it can exit, the activeState would call
 				 * -> state.fsm.StateCanExit() which in turn would call
@@ -406,7 +413,7 @@ namespace VaporStateMachine
 		/// </summary>
 		/// <param name="name">The name / identifier of the new state</param>
 		/// <param name="state">The new state instance, e.g. <c>State</c>, <c>CoState</c>, <c>StateMachine</c></param>
-		public void AddState(State state, int layer)
+		public void AddState(State state, int layer, bool canBeStartingState = true)
         {
             state.StateMachine = this;
             state.Init();
@@ -417,7 +424,10 @@ namespace VaporStateMachine
 
             if (!_startStates.ContainsKey(layer) || !_startStates[layer].hasState)
             {
-                SetDefaultState(state.ID, layer);
+                if (canBeStartingState)
+                {
+                    SetDefaultState(state.ID, layer);
+                }
                 _pendingStates[layer] = (layer, state.ID, false);
                 _activeStates[layer] = null;
                 _transitionsFromAny[layer] = new();
@@ -580,7 +590,7 @@ namespace VaporStateMachine
 		/// <returns></returns>
 		private int TryTransition(Transition transition)
         {
-            return !transition.ShouldTransition() ? 0 : transition.Desire;
+            return transition.ShouldTransition() ? transition.Desire : 0;
         }
 
         /// <summary>
@@ -589,7 +599,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllDirectTransitions(int layer)
         {
-            if (DetermineTransition(_activeTransitions[layer], true, layer, out var to))
+            if (_activeTransitions.ContainsKey(layer) && DetermineTransition(_activeTransitions[layer], true, layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -606,7 +616,7 @@ namespace VaporStateMachine
 		/// <returns>Returns true if a transition occurred.</returns>
 		private bool TryAllGlobalTransitions(int layer)
         {
-            if (DetermineTransition(_transitionsFromAny[layer], false, layer, out var to))
+            if (_transitionsFromAny.ContainsKey(layer) && DetermineTransition(_transitionsFromAny[layer], false, layer, out var to))
             {
                 RequestStateChange(layer, to);
                 return true;
@@ -624,7 +634,7 @@ namespace VaporStateMachine
             foreach (Transition transition in transitions)
             {
                 // Don't transition to the "to" state, if that state is already the active state
-                if (!canTransitionOnSelf && transition.To == _activeStates[layer].ID)
+                if (!canTransitionOnSelf && _activeStates[layer] != null && transition.To == _activeStates[layer].ID)
                 {
                     continue;
                 }

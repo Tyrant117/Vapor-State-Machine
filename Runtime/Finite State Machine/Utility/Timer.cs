@@ -12,7 +12,7 @@ namespace VaporStateMachine
 
     public struct FiniteTimer : ITimer
     {
-        public double StartTime { get; private set; } 
+        public double StartTime { get; private set; }
         public double Elapsed => Time.timeAsDouble - StartTime;
 
         public FiniteTimer(double startTime)
@@ -56,6 +56,12 @@ namespace VaporStateMachine
         public Timer()
         {
             StartTime = Time.timeAsDouble;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Pause(float deltaTime)
+        {
+            StartTime += deltaTime;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace VaporStateMachine
 {
     public class CoroutineStateCompleteTransition : Transition
@@ -16,7 +18,7 @@ namespace VaporStateMachine
             Condition = CoroutineComplete;
         }
 
-        public CoroutineStateCompleteTransition(int from, int to, int desire, bool inverse, CoroutineState state) : base(from, to, desire, inverse)
+        protected CoroutineStateCompleteTransition(int from, int to, int desire, bool inverse, CoroutineState state) : base(from, to, desire, inverse)
         {
             _watchingState = state;
             Condition = CoroutineComplete;
@@ -24,6 +26,7 @@ namespace VaporStateMachine
 
         private bool CoroutineComplete(Transition t)
         {
+            //Debug.Log($"CoComp: {_watchingState.CoroutineIsComplete}");
             return _watchingState.CoroutineIsComplete;
         }
     }
