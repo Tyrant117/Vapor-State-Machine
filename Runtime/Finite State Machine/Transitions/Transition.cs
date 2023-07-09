@@ -1,7 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 
 namespace VaporStateMachine
 {
@@ -73,7 +70,7 @@ namespace VaporStateMachine
         /// </summary>
         public virtual void OnExit()
         {
-
+            Exited?.Invoke();
         }
 
         /// <summary>

@@ -202,7 +202,7 @@ namespace VaporStateMachine
             {
                 _layerLog?.LogExit(_activeState.Name);
                 transition?.OnExit();
-                _activeState.OnExit(transition);
+                _activeState?.OnExit(transition);
             }
 
             if (!_nameToStateBundle.TryGetValue(id, out StateBundle bundle) || bundle.State == null)
@@ -221,26 +221,29 @@ namespace VaporStateMachine
             activeTriggerTransitions = bundle.TriggerToTransitions ?? s_noTriggerTransitions;
 
             _activeState = bundle.State;
-            _layerLog?.LogEnter(_activeState.Name);
-            _activeState.OnEnter();
-
-            foreach (Transition t in activeTransitions)
+            if (_activeState != null)
             {
-                t.OnEnter();
-            }
-
-            foreach (List<Transition> transitions in activeTriggerTransitions.Values)
-            {
-                foreach (Transition t in transitions)
+                _layerLog?.LogEnter(_activeState.Name);
+                _activeState.OnEnter();
+                foreach (Transition t in activeTransitions)
                 {
                     t.OnEnter();
                 }
+
+                foreach (List<Transition> transitions in activeTriggerTransitions.Values)
+                {
+                    foreach (Transition t in transitions)
+                    {
+                        t.OnEnter();
+                    }
+                }
+
+                if (_activeState.CanExitInstantly)
+                {
+                    TryAllDirectTransitions();
+                }
             }
 
-            if (_activeState.CanExitInstantly)
-            {
-                TryAllDirectTransitions();
-            }
             s_ChangeStateMarker.End();
         }
 
