@@ -238,7 +238,7 @@ namespace VaporStateMachine
                     }
                 }
 
-                if (_activeState.CanExitInstantly)
+                if (_activeState != null && _activeState.CanExitInstantly)
                 {
                     TryAllDirectTransitions();
                 }
